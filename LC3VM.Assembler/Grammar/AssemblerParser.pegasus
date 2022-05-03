@@ -1,0 +1,114 @@
+﻿@namespace LC3VM.Assembler.Grammar
+@classname AssemblerParser
+@accessibility internal
+
+@using System.Globalization
+@using LC3VM.Assembler.Extensions
+@using LC3VM.Assembler.Grammar.Directives
+@using LC3VM.Assembler.Grammar.Instructions
+@using LC3VM.Registers
+
+@start program
+@trace true
+@ignorecase true
+
+program <Program>
+    = lines:Line<0,,newline> _ EOF { new Program(lines) }
+
+Line <BaseLine>
+    = _ d:directive _ comment? { d }
+    / _ i:instruction _ comment? { i }
+    / _ l:label _ i:instruction _ comment? { new LabelledLine(l, i) }
+    / _ l:label _ d:directive _ comment? { new LabelledLine(l, d) }
+    / _ l:label _ comment? { new LabelledLine(l, null) }
+    / _ c:comment { null }
+    / _ { null }
+
+instruction <BaseInstruction>
+    = "GETC" { new Trap(0x20) }
+    / "OUT" { new Trap(0x21) }
+    / "PUTS" { new Trap(0x22) }
+    / "IN" { new Trap(0x23) }
+    / "PUTSP" { new Trap(0x24) }
+    / "HALT" { new Trap(0x25) }
+    / "TRAP" _ n:number { new Trap((byte)n) }
+
+    / "ADD" _ dr:register _ "," _ sr1:register _ "," _ sr2:register { new Add(dr, sr1, sr2) }
+    / "ADD" _ dr:register _ "," _ sr1:register _ "," _ imm:number { new AddImmediate(dr, sr1, (byte)imm) }
+
+    / "AND" _ dr:register _ "," _ sr1:register _ "," _ sr2:register { new And(dr, sr1, sr2) }
+    / "AND" _ dr:register _ "," _ sr1:register _ "," _ imm:number { new AndImmediate(dr, sr1, (byte)imm) }
+
+    / "LD" _ r:register _ "," _ l:label { new Load(r, l) }
+    / "LDI" _ r:register _ "," _ l:label { new LoadIndirect(r, l) }
+    / "LDR" _ dr:register _ "," _ br:register _ "," _ off:number { new LoadBaseOffset(dr, br, (byte)off) }
+    / "LEA" _ r:register _ "," _ l:label { new LoadEffectiveAddress(r, l) }
+
+    / "ST" _ r:register _ "," _ l:label { new Store(r, l) }
+    / "STI" _ r:register _ "," _ l:label { new StoreIndirect(r, l) }
+    / "STR" _ sr:register _ "," _ br:register _ "," _ off:number { new StoreBaseOffset(sr, br, (byte)off) }
+
+    / "RTI" { new ReturnFromInterrupt() }
+
+    / "JMP" _ r:register { new JumpInstruction(r) }
+    / "RET" _ { new JumpInstruction(Register.R7) }
+    / "RTT" _ { new JumpInstruction(Register.R7, true) }
+    / "JMPT" _ "R7" { new JumpInstruction(Register.R7, true) }
+
+    / "BR" n:"n"? z:"z"? p:"p"? _ l:label { new Branch(l, n.Any(), z.Any(), p.Any()) }
+
+directive <BaseDirective>
+    = "\.ORIG" _ n:number { new Origin(n) }
+    / "\.FILL" _ n:number { new FillValue(n) }
+    / "\.FILL" _ l:label { new FillLabel(l) }
+    / "\.BLKW" _ l:number { new FillBlock(l, 0) }
+    / "\.STRINGZ" _ s:string { new FillString(s) }
+    / "\.END" { null }
+
+comment
+    = ";" c:((!newline .)*)
+
+// ########################################
+// Others
+
+register <Register>
+    = "R" s:([0-8]) { (Register)byte.Parse(s) }
+    / "PC" { Register.PC }
+
+label <string>
+    = s:identifier ":"? { s }
+
+identifier <string>
+    = s:([a-zA-Z_][a-zA-Z0-9_]<0,>) { s }
+
+newline
+    = "\r\n"
+    / "\n"
+
+_
+    = [ \t]*
+
+EOF
+    = !.
+    / unexpected:. #error{ "Unexpected character '" + unexpected + "'." }
+
+string <String>
+    = "\"" chars:unicode* ("\"" / #ERROR{ "Expected '\"'" }) { string.Concat(chars) }
+
+unicode
+    = c:. !{c == "\\" || c == "\"" || char.IsControl(c[0])} { c }
+    / "\\" c:(
+        e:["\/\\] { e } /
+        "b" { "\b" } /
+        "f" { "\f" } /
+        "n" { "\n" } /
+        "r" { "\r" } /
+        "t" { "\t" } /
+        "u" digits:("" [0-9A-F]i<4>) { ((char)Convert.ToInt32(digits, 16)).ToString() }
+    ) { c }
+
+number <ushort>
+    = "#"? s:([0-9]+) { ushort.Parse(string.Concat(s)) }
+    / "#"? "-" s:([0-9]+) { unchecked((ushort)short.Parse(string.Concat(s))) }
+    / "0"? s:("x" [0-9a-fA-F]+) { ushort.Parse(s.TrimStart("x"), NumberStyles.HexNumber) }
+    / "0"? s:("b" [01]+) { Convert.ToUInt16(s.TrimStart("b"), 2) }

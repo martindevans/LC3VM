@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "LC3VM.Assembler.Console": {
+      "commandName": "Project",
+      "commandLineArgs": "-a C:\\Users\\Martin\\Documents\\dotnet\\LC3VM\\LC3VM.Assembler.Console\\os.asm"
+    }
+  }
+}
