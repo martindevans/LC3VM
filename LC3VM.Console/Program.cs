@@ -1,6 +1,5 @@
 ﻿using LC3VM;
 using LC3VM.Devices;
-using LC3VM.Traps;
 
 var vm = new VM(
     //new TrapGetC(),
@@ -13,7 +12,7 @@ var vm = new VM(
 )
 {
     TimerInterruptEnable = true,
-    TimerInterval = 3
+    TimerInterval = 2
 };
 
 vm.LoadImage(File.OpenRead("os.obj"));

@@ -10,7 +10,7 @@ namespace LC3VM
         private readonly Dictionary<ushort, IMemoryMappedDevice> _memoryMap = new();
         private readonly Dictionary<ushort, ITrapHandler> _traps = new();
 
-        public RegisterFile Registers { get; } = new RegisterFile(new ushort[(int)Register.COUNT]);
+        public RegisterFile Registers { get; } = new RegisterFile();
         public ushort[] Memory { get; } = new ushort[65536];
 
         public bool Halted
@@ -39,27 +39,6 @@ namespace LC3VM
             get => Registers[Register.PC];
             private set => Registers[Register.PC] = value;
         }
-
-        private Condition Condition
-        {
-            get => (Condition)(Registers[Register.PSR] & 0b111);
-            set => Registers[Register.PSR] = (ushort)((Registers[Register.PSR] & ~0b111) | (ushort)value);
-        }
-        public bool IsSupervisorMode
-        {
-            get => (Registers[Register.PSR] & (1 << 15)) == 0;
-            private set => Registers[Register.PSR] = (ushort)((Registers[Register.PSR] & 0x7FFF) | ((value ? 0 : 1) << 15));
-        }
-        public byte PriorityLevel
-        {
-            get => (byte)((Registers[Register.PSR] >> 8) & 0b111);
-            private set
-            {
-                if (value > 7)
-                    throw new ArgumentOutOfRangeException(nameof(value), "Priority must not be > 7");
-                Registers[Register.PSR] = (ushort)((Registers[Register.PSR] & 0xF8FF) | (value << 8));
-            }
-        }
         #endregion
 
         #region constructor
@@ -77,12 +56,9 @@ namespace LC3VM
             PC = 0x3000;
             Halted = false;
 
-            IsSupervisorMode = false;
-            PriorityLevel = 0;
-            Condition = Condition.FL_ZRO;
-
-            Registers[Register.SSP] = 0x2FFF;
-            Registers[Register.USP] = 0xFDFF;
+            Registers.IsSupervisorMode = false;
+            Registers.PriorityLevel = 0;
+            Registers.Condition = Condition.FL_ZRO;
         }
         #endregion
 
@@ -189,7 +165,7 @@ namespace LC3VM
         {
             if (priority > 7)
                 throw new ArgumentOutOfRangeException(nameof(priority), "Priority must not be > 7");
-            if (priority <= PriorityLevel)
+            if (priority <= Registers.PriorityLevel)
                 return false;
             if (vector > 128)
                 throw new ArgumentOutOfRangeException(nameof(vector), "Interrupt vector must be <= 128");
@@ -205,7 +181,7 @@ namespace LC3VM
             if (vector > 128)
                 throw new ArgumentOutOfRangeException(nameof(vector), "Exception vector must be <= 128");
 
-            EnterSupervisor(PriorityLevel);
+            EnterSupervisor(Registers.PriorityLevel);
             PC = Memory[0x0180 + vector];
         }
 
@@ -215,17 +191,10 @@ namespace LC3VM
             var pc = Registers[Register.PC];
             var psr = Registers[Register.PSR];
 
-            // Swap stack pointer if necessary
-            if (!IsSupervisorMode)
-            {
-                Registers[Register.USP] = Registers[Register.R6];
-                Registers[Register.R6] = Registers[Register.SSP];
-            }
-
             // Swap into supervisor mode
-            IsSupervisorMode = true;
-            PriorityLevel = priority;
-            Condition = Condition.None;
+            Registers.IsSupervisorMode = true;
+            Registers.PriorityLevel = priority;
+            Registers.Condition = Condition.None;
 
             // Save state on supervisor stack
             Push(psr);
@@ -311,7 +280,7 @@ namespace LC3VM
             var pc_offset = SignExtend(instr, 9);
             var cond_flag = (instr >> 9) & 0b111;
 
-            if ((cond_flag & (int)Condition) != 0 || cond_flag == 0)
+            if ((cond_flag & (int)Registers.Condition) != 0 || cond_flag == 0)
             {
                 var v = unchecked((short)Registers[Register.PC]);
                 Registers[Register.PC] = unchecked((ushort)(v + pc_offset));
@@ -324,7 +293,7 @@ namespace LC3VM
 
             // Exit supervisor mode if this is a RET instruction and the final bit is set
             if (r1 == 7 & (instr & 0b1) == 1)
-                IsSupervisorMode = false;
+                Registers.IsSupervisorMode = false;
 
             Registers[Register.PC] = Registers[r1];
         }
@@ -445,7 +414,7 @@ namespace LC3VM
 
         private void ReturnFromInterrupt()
         {
-            if (!IsSupervisorMode)
+            if (!Registers.IsSupervisorMode)
             {
                 Exception((byte)LC3VM.Exception.PrivelegeViolation);
                 return;
@@ -458,13 +427,6 @@ namespace LC3VM
             // Restore state
             Registers[Register.PC] = pc;
             Registers[Register.PSR] = psr;
-
-            // Restore user stack pointer if leaving supervisor mode
-            if (!IsSupervisorMode)
-            {
-                Registers[Register.SSP] = Registers[Register.R6];
-                Registers[Register.R6] = Registers[Register.USP];
-            }
         }
         #endregion
 
@@ -537,7 +499,7 @@ namespace LC3VM
             else if (value == 0)
                 flag = Condition.FL_ZRO;
 
-            Condition = flag;
+            Registers.Condition = flag;
         }
     }
 }

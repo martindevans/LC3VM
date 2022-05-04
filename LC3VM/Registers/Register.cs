@@ -21,16 +21,6 @@
         /// </summary>
         PSR,
 
-        /// <summary>
-        /// Supervisor Stack Pointer
-        /// </summary>
-        SSP,
-
-        /// <summary>
-        /// User Stack Pointer
-        /// </summary>
-        USP,
-
         COUNT,
     }
 }
