@@ -2,13 +2,13 @@
 
 namespace LC3VM.Assembler.Grammar.Instructions;
 
-internal class JumpInstruction
+internal class Jump
     : BaseInstruction
 {
     public Register BR { get; }
     public bool ExitSupervisor { get; }
 
-    public JumpInstruction(Register br, bool exitSupervisor = false)
+    public Jump(Register br, bool exitSupervisor = false)
     {
         BR = br;
         ExitSupervisor = exitSupervisor;

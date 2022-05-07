@@ -39,6 +39,11 @@ namespace LC3VM
             get => Registers[Register.PC];
             private set => Registers[Register.PC] = value;
         }
+
+        /// <summary>
+        /// Get or set if `Trap` sets protected mode when called.
+        /// </summary>
+        public bool ProtectedTraps { get; init; }
         #endregion
 
         #region constructor
@@ -99,7 +104,7 @@ namespace LC3VM
 
             // trigger timer interrupt 
             CycleCount++;
-            if (TimerInterruptEnable && CycleCount >= TimerInterval)
+            if (TimerInterruptEnable && CycleCount >= (TimerInterval + 2))
                 if (Interrupt(0x02, 1))
                     CycleCount = 0;
 
@@ -300,29 +305,32 @@ namespace LC3VM
 
         private void Trap(ushort instr)
         {
+            // If protected traps are enabled it is not valid to TRAP while in protected mode
+            if (ProtectedTraps && Registers.IsSupervisorMode)
+            {
+                Exception((byte)LC3VM.Exception.PrivelegeViolation);
+                return;
+            }
+
+            // Get the trap vector
             var trap = instr & 0xFF;
 
+            // Check if there is a special purpose trap handler registered for this vector
             if (_traps.TryGetValue((ushort)trap, out var handler))
             {
                 handler.Trap(this);
                 return;
             }
 
-            if (trap == (int)TrapCode.TRAP_HALT)
-            {
-                Halted = true;
-                return;
-            }
-
-            // Save current position
+            // Save PC position, ready to return to
             Registers[Register.R7] = Registers[Register.PC];
 
             // Jump to trap handler
             Registers[Register.PC] = ReadMemory(trap);
 
-            //todo: this breaks 2048 (due to OS using RET instead of RTT/JMPT?)
-            //// Enter supervision mode
-            //IsSupervisorMode = true;
+            // Enter supervisor mode to execute this trap
+            if (ProtectedTraps)
+                Registers.IsSupervisorMode = true;
         }
 
 

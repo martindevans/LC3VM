@@ -44,7 +44,9 @@ public class Assembler
         catch (FormatException ex)
         {
             var cursor = ex.Data["cursor"] as Cursor;
-            throw;
+            if (cursor == null)
+                throw;
+            throw new ParseException(cursor, ex.Message);
         }
     }
 

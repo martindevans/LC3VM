@@ -50,7 +50,7 @@
 
         internal RegisterFile()
         {
-            _registers = new ushort[(int)Register.COUNT];
+            _registers = new ushort[Enum.GetNames(typeof(Register)).Length];
         }
     }
 }

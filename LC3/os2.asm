@@ -1,4 +1,4 @@
-        .ORIG x0000
+.ORIG x0000
 
 ; the TRAP vector table
     .FILL BAD_TRAP  ; x00
@@ -33,13 +33,23 @@
     .FILL BAD_TRAP  ; x1D
     .FILL BAD_TRAP  ; x1E
     .FILL BAD_TRAP  ; x1F
-    .FILL TRAP_GETC ; x20
-    .FILL TRAP_OUT  ; x21
-    .FILL TRAP_PUTS ; x22
-    .FILL TRAP_IN   ; x23
-    .FILL TRAP_PUTSP ; x24        
-    .FILL TRAP_HALT ; x25
-    .FILL BAD_TRAP  ; x26
+
+    ; .FILL TRAP_GETC     ; x20
+    ; .FILL TRAP_OUT      ; x21
+    ; .FILL TRAP_PUTS     ; x22
+    ; .FILL TRAP_IN       ; x23
+    ; .FILL TRAP_PUTSP    ; x24
+    ; .FILL TRAP_HALT     ; x25
+    ; .FILL BAD_TRAP      ; x26
+
+    .FILL GENERIC_TRAP  ; x20 - GETC
+    .FILL BAD_TRAP      ; x21
+    .FILL BAD_TRAP      ; x22
+    .FILL BAD_TRAP      ; x23
+    .FILL BAD_TRAP      ; x24
+    .FILL BAD_TRAP      ; x25
+    .FILL BAD_TRAP      ; x26
+
     .FILL BAD_TRAP  ; x27
     .FILL BAD_TRAP  ; x28
     .FILL BAD_TRAP  ; x29
@@ -259,8 +269,7 @@
     .FILL BAD_TRAP  ; xFF
 
 ; the interrupt vector table
-; interrupts are not currently implemented
-        .FILL BAD_INT   ; x00
+    .FILL BAD_INT   ; x00
     .FILL BAD_INT   ; x01
     .FILL BAD_INT   ; x02
     .FILL BAD_INT   ; x03
@@ -517,172 +526,77 @@
     .FILL BAD_INT   ; xFE
     .FILL BAD_INT   ; xFF
 
-
-;;; OS_START - operating system entry point (always starts at x0200)
+; OS_START - operating system entry point (always starts at x0200)
 OS_START
-    ;; set MPR
+    ; set MPR
     LD R0, MPR_INIT
     STI R0, OS_MPR
 
-    ;; set timer interval
-    LD R0, TIM_INIT
-    STI R0, OS_TMI
-
-    ;; start running user code (clear Privilege bit w/ JMPT)
+    ; start running user code
     LD R7, USER_CODE_ADDR
-    JMPT    R7
+    RTT
 
-OS_KBSR .FILL xFE00     ; keyboard status register
-OS_KBDR .FILL xFE02     ; keyboard data register
-OS_DSR  .FILL xFE04     ; display status register
-OS_DDR  .FILL xFE06     ; display data register
-OS_TR   .FILL xFE08     ; timer register
-OS_TMI  .FILL xFE0A             ; timer interval register
-OS_MPR  .FILL xFE12     ; memory protection register
-OS_MCR  .FILL xFFFE     ; machine control register
+; BAD_TRAP - code to execute for undefined trap
+BAD_TRAP
+    RTT
 
-OS_SAVE_R0      .BLKW 1
-OS_SAVE_R1      .BLKW 1
-OS_SAVE_R2      .BLKW 1
-OS_SAVE_R3      .BLKW 1
-OS_SAVE_R4      .BLKW 1
-OS_SAVE_R5      .BLKW 1
-OS_SAVE_R6      .BLKW 1
-OS_SAVE_R7      .BLKW 1
-OS_OUT_SAVE_R1  .BLKW 1
-OS_IN_SAVE_R7   .BLKW 1
-                    
-MASK_HI         .FILL x7FFF
-LOW_8_BITS      .FILL x00FF
-TIM_INIT        .FILL #40
-MPR_INIT    .FILL xFFFF ; user can access everything
-;MPR_INIT   .FILL x0FF8 ; user can access x3000 to xbfff
-USER_CODE_ADDR  .FILL x3000 ; user code starts at x3000
+; BAD_INT - code to execute for undefined interrupt.
+BAD_INT
+    RTI
 
-        
-;;; GETC - Read a single character of input from keyboard device into R0
-TRAP_GETC
+; Handler for all valid traps
+; - Save registers 0-6
+; - Return with RTT (exiting supervisor mode)
+; - Parses trap vector from instruction
+GENERIC_TRAP
+    ST R1, OS_SAVE_R1
+    ST R7, OS_SAVE_R7
+
+    LDR R0, R7, #-1             ; Get the instruction we just came from (i.e. the TRAP)
+    LD  R1, LO_8_BITS       
+    AND R0, R0, R1              ; Mask just the trap code off the end
+    LD  R1, TR_OFFSET 
+    ADD R0, R0, R1              ; Offset so the first valid trap code is 0
+    LD  R1, OS_FUNC_TABLE 
+    ADD R0, R0, R1              ; Offset into the OS function table
+    JSRR R0                     ; Jump to the trap handler subroutine
+
+    LD R1, OS_SAVE_R1
+    LD R7, OS_SAVE_R7
+    RTT
+
+
+OS_KBSR .FILL 0xFE00     ; keyboard status register
+OS_KBDR .FILL 0xFE02     ; keyboard data register
+OS_DSR  .FILL 0xFE04     ; display status register
+OS_DDR  .FILL 0xFE06     ; display data register
+OS_MPR  .FILL 0xFE12     ; memory protection register
+OS_MCR  .FILL 0xFFFE     ; machine control register
+
+MPR_INIT        .FILL 0xFFFF    ; user can access everything
+;MPR_INIT       .FILL 0x0FF8    ; user can access 0x3000 to 0xBFFF
+USER_CODE_ADDR  .FILL 0x3000    ; user code starts at x3000
+LO_8_BITS       .FILL 0x00FF    ; Constant value low 8 bits mask
+HI_8_BITS       .FILL 0xFF00    ; Constant value high 8 bits mask
+TR_OFFSET       .FILL #-32      ; Offset to first valid trap
+
+OS_SAVE_R0 .BLKW #1
+OS_SAVE_R1 .BLKW #1
+OS_SAVE_R2 .BLKW #1
+OS_SAVE_R3 .BLKW #1
+OS_SAVE_R4 .BLKW #1
+OS_SAVE_R5 .BLKW #1
+OS_SAVE_R6 .BLKW #1
+OS_SAVE_R7 .BLKW #1
+
+; Read a character from input
+OS_GETC
     LDI R0,OS_KBSR      ; wait for a keystroke
-    BRzp TRAP_GETC
+    BRzp OS_GETC
     LDI R0,OS_KBDR      ; read it and return
     RET
 
-        
-;;; OUT - Write the character in R0 to the console.
-TRAP_OUT
-    ST R1,OS_OUT_SAVE_R1    ; save R1
-TRAP_OUT_WAIT
-    LDI R1,OS_DSR       ; wait for the display to be ready
-    BRzp TRAP_OUT_WAIT
-    STI R0,OS_DDR       ; write the character and return
-    LD R1,OS_OUT_SAVE_R1    ; restore R1
-    RET
-
-                
-;;; PUTS - Write a NUL-terminated string of characters to the console,
-;;; starting from the address in R0.    
-TRAP_PUTS
-    ST R0,OS_SAVE_R0    ; save R0, R1, and R7
-    ST R1,OS_SAVE_R1
-    ST R7,OS_SAVE_R7
-    ADD R1,R0,#0        ; move string pointer (R0) into R1
-
-TRAP_PUTS_LOOP
-    LDR R0,R1,#0        ; write characters in string using OUT
-    BRz TRAP_PUTS_DONE
-    OUT
-    ADD R1,R1,#1
-    BRnzp TRAP_PUTS_LOOP
-
-TRAP_PUTS_DONE
-    LD R0,OS_SAVE_R0    ; restore R0, R1, and R7
-    LD R1,OS_SAVE_R1
-    LD R7,OS_SAVE_R7
-    RET
-
-;;; IN - prompt the user for a single character input, which is stored
-;;; in R0 and also echoed to the console.        
-TRAP_IN
-    ST R7,OS_IN_SAVE_R7 ; save R7 (no need to save R0, since we 
-                ;    overwrite later
-    LEA R0,TRAP_IN_MSG  ; prompt for input
-    PUTS
-    GETC            ; read a character
-    OUT         ; echo back to monitor
-    ST R0,OS_SAVE_R0    ; save the character
-    AND R0,R0,#0        ; write a linefeed, too
-    ADD R0,R0,#10
-    OUT
-    LD R0,OS_SAVE_R0    ; restore the character
-    LD R7,OS_IN_SAVE_R7 ; restore R7
-    RET                     ; this doesn't work, because
-
-
-;;; PUTSP - Write a NUL-terminated string of characters, packed 2 per
-;;; memory location, to the console, starting from the address in R0.
-TRAP_PUTSP
-    ; NOTE: This trap will end when it sees any NUL, even in
-    ; packed form, despite the P&P second edition's requirement
-    ; of a double NUL.
-
-    ST R0,OS_SAVE_R0    ; save R0, R1, R2, R3, and R7
-    ST R1,OS_SAVE_R1
-    ST R2,OS_SAVE_R2
-    ST R3,OS_SAVE_R3
-    ST R7,OS_SAVE_R7
-    ADD R1,R0,#0        ; move string pointer (R0) into R1
-
-TRAP_PUTSP_LOOP
-    LDR R2,R1,#0        ; read the next two characters
-    LD R0,LOW_8_BITS    ; use mask to get low byte
-    AND R0,R0,R2        ; if low byte is NUL, quit printing
-    BRz TRAP_PUTSP_DONE
-    OUT         ; otherwise print the low byte
-
-    AND R0,R0,#0        ; shift high byte into R0
-    ADD R3,R0,#8
-TRAP_PUTSP_S_LOOP
-    ADD R0,R0,R0        ; shift R0 left
-    ADD R2,R2,#0        ; move MSB from R2 into R0
-    BRzp TRAP_PUTSP_MSB_0
-    ADD R0,R0,#1
-TRAP_PUTSP_MSB_0
-    ADD R2,R2,R2        ; shift R2 left
-    ADD R3,R3,#-1
-    BRp TRAP_PUTSP_S_LOOP
-
-    ADD R0,R0,#0        ; if high byte is NUL, quit printing
-    BRz TRAP_PUTSP_DONE
-    OUT         ; otherwise print the low byte
-
-    ADD R1,R1,#1        ; and keep going
-    BRnzp TRAP_PUTSP_LOOP
-
-TRAP_PUTSP_DONE
-    LD R0,OS_SAVE_R0    ; restore R0, R1, R2, R3, and R7
-    LD R1,OS_SAVE_R1
-    LD R2,OS_SAVE_R2
-    LD R3,OS_SAVE_R3
-    LD R7,OS_SAVE_R7
-    RET
-
-        
-;;; HALT - trap handler for halting machine
-TRAP_HALT   
-    LDI R0,OS_MCR       
-    LD R1,MASK_HI           ; clear run bit in MCR
-    AND R0,R0,R1
-    STI R0,OS_MCR       ; halt!
-    BRnzp OS_START      ; restart machine
-
-        
-;;; BAD_TRAP - code to execute for undefined trap
-BAD_TRAP
-    BRnzp TRAP_HALT     ; execute HALT
-
-
-;;; BAD_INT - code to execute for undefined interrupt. There won't 
-;;; actually be any interrupts, so this will never actually get called.
-BAD_INT     RTI
-
-TRAP_IN_MSG .STRINGZ "\nInput a character> "
+; Valid OS function vector table
+OS_FUNC_TABLE
+    .FILL OS_GETC
+    

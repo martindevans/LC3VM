@@ -2,7 +2,7 @@
   "profiles": {
     "LC3VM.Assembler.Console": {
       "commandName": "Project",
-      "commandLineArgs": "-a C:\\Users\\Martin\\Documents\\dotnet\\LC3VM\\LC3VM.Assembler.Console\\test.asm"
+      "commandLineArgs": "-a C:\\Users\\Martin\\Documents\\dotnet\\LC3VM\\LC3VM.Assembler.Console\\test.asm C:\\Users\\Martin\\Documents\\dotnet\\LC3VM\\LC3\\os2.asm"
     }
   }
 }

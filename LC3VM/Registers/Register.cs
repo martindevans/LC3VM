@@ -20,7 +20,5 @@
         /// Process Status Register
         /// </summary>
         PSR,
-
-        COUNT,
     }
 }

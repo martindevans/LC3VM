@@ -1,6 +1,7 @@
 ﻿using CommandLine;
 using LC3VM.Assembler;
 using LC3VM.Assembler.Console;
+using LC3VM.Assembler.Grammar;
 
 var parsed = Parser.Default.ParseArguments<Options>(args);
 
@@ -13,7 +14,27 @@ parsed.WithNotParsed(errors =>
 parsed.WithParsed(o =>
 {
     foreach (var path in o.Inputs)
-        Assemble(path);
+    {
+        try
+        {
+            Assemble(path);
+        }
+        catch (ParseException ex)
+        {
+            var cursor = ex.Cursor;
+
+            var spaces = new string(' ', Math.Max(0, cursor.Column - 2));
+
+            var lines = cursor.Subject.Split(new string[] {"\r\n", "\r", "\n"}, StringSplitOptions.None);
+            var line = lines[cursor.Line - 1];
+
+            Console.WriteLine($" ## {path}");
+            Console.WriteLine(
+                $"{line}\n"
+              + $"{spaces}^ {ex.Message} (Ln{cursor.Line}, Col{cursor.Column - 1})\n"
+            );
+        }
+    }
 });
 
 void Assemble(string path)

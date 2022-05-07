@@ -16,6 +16,10 @@ internal class LabelledLine
 
     public override IEnumerable<ushort> Emit(IReadOnlyDictionary<string, ushort> symbolTable, int pc)
     {
+        var expected = symbolTable[Label];
+        if (pc != expected)
+            throw new InvalidOperationException("Label/PC mismatch");
+
         return Line?.Emit(symbolTable, pc) ?? Array.Empty<ushort>();
     }
 }
